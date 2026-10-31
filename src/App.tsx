@@ -11,13 +11,17 @@ import { PaymentsView } from './components/payments/PaymentsView';
 import { CustomersView } from './components/customers/CustomersView';
 import { ProductsView } from './components/products/ProductsView';
 import { CustomerPortalView } from './components/portal/CustomerPortalView';
+<<<<<<< .merge_file_pTm19e
 import { SqlConsoleView } from './components/sql/SqlConsoleView';
+=======
+import { LandingPage } from './components/layout/LandingPage';
+>>>>>>> .merge_file_sC9aO2
 import { ScheduledBillingRunResult } from './types/models';
 import { CheckCircle2 } from 'lucide-react';
 import './styles/brightloop.css';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [portalCustomerId, setPortalCustomerId] = useState<string | undefined>();
@@ -65,6 +69,11 @@ export const App: React.FC = () => {
 
   const getPageInfo = (): { title: string; subtitle: string } => {
     switch (activeTab) {
+      case 'home':
+        return {
+          title: 'Welcome to Brightloop',
+          subtitle: 'Subscription operations, made clearer',
+        };
       case 'dashboard':
         return {
           title: 'Overview',
@@ -114,6 +123,10 @@ export const App: React.FC = () => {
   };
 
   const { title, subtitle } = getPageInfo();
+
+  if (activeTab === 'home') {
+    return <LandingPage onNavigate={setActiveTab} />;
+  }
 
   return (
     <div className="bl-layout">

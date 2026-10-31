@@ -16,6 +16,7 @@ import {
 import { store } from '../../lib/storage';
 
 export type ActiveTab =
+  | 'home'
   | 'dashboard'
   | 'subscriptions'
   | 'quotations'
@@ -53,7 +54,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="bl-sidebar">
       {/* Brand & Logo */}
-      <div className="bl-sidebar-brand">
+      <button
+        type="button"
+        className="bl-sidebar-brand"
+        onClick={() => setActiveTab('home')}
+        aria-label="Brightloop home"
+      >
         <div className="bl-logo-box">
           <Zap size={22} fill="white" />
         </div>
@@ -61,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <h1>Brightloop</h1>
           <span>SQL Edition</span>
         </div>
-      </div>
+      </button>
 
       {/* Navigation */}
       <nav className="bl-sidebar-nav">
