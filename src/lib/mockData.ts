@@ -155,7 +155,7 @@ export const INITIAL_PLANS: ProductPlan[] = [
     is_active: true,
     features: [
       'Multi-entity billing',
-      'Dedicated Supabase DB replica',
+      'Dedicated SQL DB replica',
       'Predictive churn model',
       '24/7 SLA & Tech Support',
       'Automated GST e-invoicing export',

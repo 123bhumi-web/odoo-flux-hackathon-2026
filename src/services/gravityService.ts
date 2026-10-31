@@ -1,6 +1,6 @@
-import { Customer, Invoice, GravityRiskLog, RiskLevel } from '../types/database';
+import { Customer, Invoice, RiskLevel } from '../types/database';
 import { GravityRiskAssessment } from '../types/models';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { SqlClient } from '../lib/sqlClient';
 
 const GRAVITY_API_KEY = import.meta.env.VITE_GRAVITY_AI_API_KEY || 'grav_live_demo_key_9831a8';
 const GRAVITY_ENDPOINT =
@@ -13,7 +13,6 @@ const GRAVITY_ENDPOINT =
 export function getDaysOverdue(dueDateStr: string): number {
   const due = new Date(dueDateStr);
   const now = new Date();
-  // Strip time for clean day diff
   const utcDue = Date.UTC(due.getFullYear(), due.getMonth(), due.getDate());
   const utcNow = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.floor((utcNow - utcDue) / (1000 * 60 * 60 * 24));
@@ -26,9 +25,6 @@ export function getDaysOverdue(dueDateStr: string): number {
  * calls the Gravity AI API endpoint, and generates context-aware payment recovery drafts.
  */
 export class GravityService {
-  /**
-   * Evaluates the risk on an overdue or pending invoice.
-   */
   public static async evaluateInvoiceDefaultRisk(
     invoice: Invoice,
     customer: Customer
@@ -39,8 +35,6 @@ export class GravityService {
     const exposureRatio = (balanceDue / creditLimit) * 100;
 
     // 1. Algorithmic Risk Scoring (0 to 100)
-    // Factors:
-    // a) Days overdue penalty: 0-45 points (accelerates past 15 and 30 days)
     let overdueScore = 0;
     if (daysOverdue > 45) {
       overdueScore = 48;
@@ -52,10 +46,7 @@ export class GravityService {
       overdueScore = Math.min(20, daysOverdue * 1.5);
     }
 
-    // b) Exposure penalty: 0-30 points (utilization of customer's credit line)
     let exposureScore = Math.min(30, (exposureRatio / 100) * 30);
-
-    // c) Customer baseline behavioral risk: 0-25 points
     let baselineScore = (Number(customer.risk_score || 10) / 100) * 22;
 
     const computedRisk = Math.min(
@@ -91,7 +82,6 @@ export class GravityService {
         'Dispatch gentle courtesy reminder. Verify if invoice was received by accounts payable department.';
     }
 
-    // Factor notes
     if (daysOverdue > 0) {
       riskFactors.push(`Payment overdue by ${daysOverdue} days (Due: ${invoice.due_date})`);
     } else {
@@ -137,7 +127,7 @@ export class GravityService {
       analyzedAt: new Date().toISOString(),
     };
 
-    // 4. Attempt real Gravity AI API call if available, otherwise record in DB
+    // 4. Dispatch to Gravity AI API if active
     try {
       if (GRAVITY_ENDPOINT && GRAVITY_API_KEY && !GRAVITY_ENDPOINT.includes('internal')) {
         await fetch(GRAVITY_ENDPOINT, {
@@ -156,18 +146,15 @@ export class GravityService {
         });
       }
     } catch (err) {
-      console.warn('Gravity AI live API unreachable, proceeding with AI engine output:', err);
+      console.warn('Gravity AI live API notice:', err);
     }
 
-    // 5. Audit Log to Supabase / Storage
+    // 5. Audit Log to SQL Database
     await this.logAssessmentAudit(assessment);
 
     return assessment;
   }
 
-  /**
-   * Generates AI-personalized recovery communications for various channels and tones.
-   */
   private static generateRecoveryMessageDraft(
     invoice: Invoice,
     customer: Customer,
@@ -215,57 +202,24 @@ export class GravityService {
         break;
     }
 
-    return {
-      channel,
-      tone,
-      subject,
-      messageBody,
-      callToAction,
-      paymentLink,
-    };
+    return { channel, tone, subject, messageBody, callToAction, paymentLink };
   }
 
-  /**
-   * Logs risk assessment results to Supabase table `gravity_risk_logs` or memory.
-   */
   public static async logAssessmentAudit(assessment: GravityRiskAssessment): Promise<void> {
     try {
-      if (isSupabaseConfigured()) {
-        await (supabase as any).from('gravity_risk_logs').insert({
-          invoice_id: assessment.invoiceId,
-          customer_id: assessment.customerId,
-          default_risk_score: assessment.defaultRiskScore,
-          risk_level: assessment.riskLevel,
-          days_overdue: assessment.daysOverdue,
-          recommended_action: assessment.recommendedAction,
-          generated_recovery_message: assessment.recoveryCommunications.messageBody,
-          communication_channel: assessment.recoveryCommunications.channel,
-          message_status: 'drafted',
-        });
-      }
+      await SqlClient.logGravityRisk(assessment);
     } catch (err) {
-      console.warn('Could not record gravity risk log to database:', err);
+      console.warn('Could not record gravity risk log in SQL:', err);
     }
   }
 
-  /**
-   * Marks communication as sent and triggers webhook or simulated dispatch.
-   */
   public static async dispatchRecoveryCommunication(
     assessment: GravityRiskAssessment
   ): Promise<{ success: boolean; channel: string; dispatchedAt: string }> {
     console.info(
-      `🚀 [Gravity AI] Dispatching ${assessment.recoveryCommunications.channel.toUpperCase()} recovery message to customer ${assessment.customerName} (${assessment.customerName}):`,
+      `🚀 [Gravity AI] Dispatching ${assessment.recoveryCommunications.channel.toUpperCase()} recovery message to customer ${assessment.customerName}:`,
       assessment.recoveryCommunications.subject
     );
-
-    // If Supabase is connected, update log
-    if (isSupabaseConfigured()) {
-      await (supabase as any)
-        .from('gravity_risk_logs')
-        .update({ message_status: 'sent' })
-        .eq('invoice_id', assessment.invoiceId);
-    }
 
     return {
       success: true,

@@ -11,8 +11,8 @@ import {
   RotateCcw,
   Zap,
   ExternalLink,
+  Database,
 } from 'lucide-react';
-import { isSupabaseConfigured } from '../../lib/supabaseClient';
 import { store } from '../../lib/storage';
 
 export type ActiveTab =
@@ -23,7 +23,8 @@ export type ActiveTab =
   | 'payments'
   | 'customers'
   | 'products'
-  | 'portal';
+  | 'portal'
+  | 'sql';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -42,12 +43,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   counts,
   onToast,
 }) => {
-  const isConnected = isSupabaseConfigured();
-
   const handleResetData = () => {
-    if (window.confirm('Reset all demo subscriptions, invoices, and customers to default hackathon dataset?')) {
+    if (window.confirm('Reset SQL database records to default seed state?')) {
       store.resetToSeed();
-      onToast('Demo state reset to initial seed data');
+      onToast('SQL Database reset to initial hackathon seed data');
     }
   };
 
@@ -60,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         <div className="bl-brand-text">
           <h1>Brightloop</h1>
-          <span>Odoo x FLUX Edition</span>
+          <span>SQL Edition</span>
         </div>
       </div>
 
@@ -130,6 +129,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Package size={18} />
           <span>Products & Plans</span>
         </button>
+
+        <div className="bl-nav-section-title">Developer & Database</div>
+
+        <button
+          className={`bl-nav-item ${activeTab === 'sql' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sql')}
+        >
+          <Database size={18} />
+          <span>SQL Workbench</span>
+        </button>
       </nav>
 
       {/* Footer & Self-Service Portal Launcher */}
@@ -150,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </p>
         </div>
 
-        {/* Backend Connectivity Status */}
+        {/* Database Connectivity Status */}
         <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div
@@ -158,18 +167,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                backgroundColor: isConnected ? '#10b981' : '#38bdf8',
-                boxShadow: isConnected ? '0 0 8px #10b981' : '0 0 8px #38bdf8',
+                backgroundColor: '#10b981',
+                boxShadow: '0 0 8px #10b981',
               }}
             />
             <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
-              {isConnected ? 'Supabase Live' : 'Reactive Engine'}
+              SQL DB (brightloop.db)
             </span>
           </div>
 
           <button
             onClick={handleResetData}
-            title="Reset Mock Database Seed"
+            title="Reset Database Seed"
             style={{
               background: 'transparent',
               border: 'none',
