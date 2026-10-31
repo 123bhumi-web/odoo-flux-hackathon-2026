@@ -12,6 +12,7 @@ import { CustomersView } from './components/customers/CustomersView';
 import { ProductsView } from './components/products/ProductsView';
 import { CustomerPortalView } from './components/portal/CustomerPortalView';
 import { LandingPage } from './components/layout/LandingPage';
+import { SqlConsoleView } from './components/sql/SqlConsoleView';
 import { ScheduledBillingRunResult } from './types/models';
 import { CheckCircle2 } from 'lucide-react';
 import './styles/brightloop.css';
@@ -22,7 +23,7 @@ export const App: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [portalCustomerId, setPortalCustomerId] = useState<string | undefined>();
 
-  // Reactive state synced with storage and Supabase
+  // Reactive state synced with SQL Database
   const [customers, setCustomers] = useState<Customer[]>(() => store.getCustomers());
   const [plans, setPlans] = useState<ProductPlan[]>(() => store.getPlans());
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(() => store.getSubscriptions());
@@ -50,7 +51,7 @@ export const App: React.FC = () => {
   const handleBillingRunComplete = (res: ScheduledBillingRunResult) => {
     showToast(
       res.message ||
-        `Billing run complete: Generated ${res.invoicesGenerated} invoices with 18% GST.`
+        `SQL procedure complete: Generated ${res.invoicesGenerated} invoices with 18% GST.`
     );
   };
 
@@ -109,6 +110,11 @@ export const App: React.FC = () => {
         return {
           title: 'Customer Self-Service Portal',
           subtitle: 'Client workspace to inspect active plans, download invoices, and settle balances',
+        };
+      case 'sql':
+        return {
+          title: 'SQL Workbench & Console',
+          subtitle: 'Direct standard SQL query editor and database inspector (brightloop.db)',
         };
     }
   };
@@ -225,6 +231,8 @@ export const App: React.FC = () => {
               onBackToAdmin={() => setActiveTab('dashboard')}
             />
           )}
+
+          {activeTab === 'sql' && <SqlConsoleView />}
         </div>
 
         <footer className="bl-footer">

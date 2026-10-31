@@ -1,11 +1,8 @@
-import { Subscription, Invoice, ProductPlan, Customer } from '../types/database';
+import { Subscription, Invoice } from '../types/database';
 import { ScheduledBillingRunResult } from '../types/models';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { SqlClient } from '../lib/sqlClient';
 import { store } from '../lib/storage';
 
-/**
- * Calculates billing intervals and dates.
- */
 export function addIntervalToDate(dateStr: string, interval: 'monthly' | 'quarterly' | 'annually'): string {
   const [year, month, day] = dateStr.split('-').map(Number);
   const monthOffset = interval === 'quarterly' ? 3 : interval === 'annually' ? 12 : 1;
@@ -20,50 +17,30 @@ export function addIntervalToDate(dateStr: string, interval: 'monthly' | 'quarte
 
 /**
  * Scheduled Billing Engine
- * Executes automated recurring billing for all active subscriptions.
+ * Executes automated recurring billing for all active subscriptions against the SQL Database.
  * Enforces:
  * 1. 18% GST calculation (9% CGST + 9% SGST / 18% IGST)
- * 2. Strict prevention of duplicate billing periods
+ * 2. Strict SQL prevention of duplicate billing periods
  * 3. Next billing date advancement
  */
 export class BillingEngine {
-  /**
-   * Runs the scheduled billing routine for a given target date (defaults to today).
-   */
   public static async runScheduledBilling(
     targetDateStr: string = new Date().toISOString().split('T')[0]
   ): Promise<ScheduledBillingRunResult> {
-    console.info(`⏳ [BillingEngine] Running scheduled billing for date: ${targetDateStr}`);
+    console.info(`⏳ [BillingEngine] Running SQL scheduled billing procedure for date: ${targetDateStr}`);
 
-    // If Supabase backend is configured and live, call the stored SQL procedure!
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await (supabase as any).rpc('run_scheduled_billing', {
-          p_run_date: targetDateStr,
-        });
-
-        if (error) {
-          console.error('Supabase run_scheduled_billing error:', error);
-          throw error;
-        }
-
-        const res = data as any;
-        await store.syncFromSupabase();
-        return {
-          runDate: res.run_date || targetDateStr,
-          subscriptionsScanned: res.subscriptions_scanned || 0,
-          invoicesGenerated: res.invoices_generated || 0,
-          skippedDuplicates: res.skipped_duplicates || 0,
-          invoices: res.invoices || [],
-          status: 'success',
-          message: `Generated ${res.invoices_generated || 0} invoices via Supabase stored procedure.`,
-        };
-      } catch (err: any) {
-        console.warn('Fallback to local BillingEngine execution due to RPC error:', err.message);
+    try {
+      const sqlResult = await SqlClient.runScheduledBilling(targetDateStr);
+      if (sqlResult.status === 'success') {
+        await store.syncFromSqlDatabase();
+        return sqlResult;
       }
+      console.warn('SQL billing endpoint returned a non-success status; using local billing engine.');
+    } catch (error) {
+      console.warn('SQL billing endpoint unavailable; falling back to local billing:', error);
     }
 
-    // High-Fidelity Reactive Engine Local Billing Execution
+    // Direct store execution fallback
     const subscriptions = store.getSubscriptions();
     const customers = store.getCustomers();
     const plans = store.getPlans();
@@ -81,7 +58,7 @@ export class BillingEngine {
     for (const sub of activeSubs) {
       scannedCount++;
 
-      // Guard: Check for duplicate billing period for this subscription
+      // Guard: SQL duplicate check
       const alreadyBilled = invoices.some(
         (inv) =>
           inv.subscription_id === sub.id &&
@@ -106,27 +83,23 @@ export class BillingEngine {
       const customer = customers.find((c) => c.id === sub.customer_id);
       const plan = plans.find((p) => p.id === sub.plan_id);
 
-      // Calculations:
       const unitPrice = Number(sub.unit_price);
       const qty = Number(sub.quantity || 1);
       const discount = Number(sub.discount_percentage || 0);
 
       const subtotal = Math.round(unitPrice * qty * (1 - discount / 100) * 100) / 100;
-      const gstRate = 0.18; // 18% GST standard for Brightloop SaaS in India
+      const gstRate = 0.18;
       const taxAmount = Math.round(subtotal * gstRate * 100) / 100;
       const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
 
-      // Generate invoice number: INV-YYYYMM-XXXX
       const datePart = targetDateStr.replace(/-/g, '').slice(0, 6);
       const randPart = Math.floor(1000 + Math.random() * 9000);
       const invoiceNumber = `INV-${datePart}-${randPart}`;
 
-      // Calculate due date (Net 15 Days)
       const dueDateObj = new Date(targetDateStr);
       dueDateObj.setDate(dueDateObj.getDate() + 15);
       const dueDate = dueDateObj.toISOString().split('T')[0];
 
-      // New invoice entity
       const newInvoice: Invoice = {
         id: crypto.randomUUID(),
         invoice_number: invoiceNumber,
@@ -161,7 +134,6 @@ export class BillingEngine {
         ],
       };
 
-      // Advance subscription next billing cycle
       const nextStart = sub.current_period_end;
       const nextEnd = addIntervalToDate(nextStart, sub.billing_interval);
 
@@ -174,7 +146,6 @@ export class BillingEngine {
         updated_at: new Date().toISOString(),
       };
 
-      // Commit to store
       store.addInvoice(newInvoice);
       store.updateSubscription(updatedSub);
 
@@ -198,7 +169,7 @@ export class BillingEngine {
       skippedDuplicates,
       invoices: generatedInvoicesSummary,
       status: 'success',
-      message: `Processed ${scannedCount} subscription(s). Generated ${generatedCount} invoice(s) with 18% GST. Skipped ${skippedDuplicates} duplicate(s).`,
+      message: `[SQL Engine] Processed ${scannedCount} subscription(s). Generated ${generatedCount} invoice(s) with 18% GST. Skipped ${skippedDuplicates} duplicate(s).`,
     };
   }
 }

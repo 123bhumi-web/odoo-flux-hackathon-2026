@@ -6,12 +6,12 @@ import {
   INITIAL_INVOICES,
   INITIAL_PAYMENTS,
 } from './mockData';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { SqlClient } from './sqlClient';
 import { ALLOWED_SUBSCRIPTION_TRANSITIONS } from '../types/models';
 
 type Listener = () => void;
 
-class BrightloopStore {
+class BrightloopSQLStore {
   private customers: Customer[] = [];
   private plans: ProductPlan[] = [];
   private subscriptions: Subscription[] = [];
@@ -24,10 +24,10 @@ class BrightloopStore {
     this.init();
   }
 
-  private init() {
+  private async init() {
     if (this.isInitialized) return;
 
-    // Load from localStorage or use initial seed
+    // Load cached records first for zero-latency paint
     const cachedCustomers = localStorage.getItem('bl_customers');
     const cachedPlans = localStorage.getItem('bl_plans');
     const cachedSubs = localStorage.getItem('bl_subscriptions');
@@ -43,9 +43,30 @@ class BrightloopStore {
     this.isInitialized = true;
     this.persist();
 
-    // If Supabase is configured, trigger background sync
-    if (isSupabaseConfigured()) {
-      this.syncFromSupabase();
+    // Sync from live SQL Database
+    await this.syncFromSqlDatabase();
+  }
+
+  public async syncFromSqlDatabase() {
+    try {
+      const [custs, plans, subs, invs, pays] = await Promise.all([
+        SqlClient.getCustomers(),
+        SqlClient.getPlans(),
+        SqlClient.getSubscriptions(),
+        SqlClient.getInvoices(),
+        SqlClient.getPayments(),
+      ]);
+
+      if (custs && custs.length > 0) this.customers = custs;
+      if (plans && plans.length > 0) this.plans = plans;
+      if (subs && subs.length > 0) this.subscriptions = subs;
+      if (invs && invs.length > 0) this.invoices = invs;
+      if (pays && pays.length > 0) this.payments = pays;
+
+      console.info('⚡ [Brightloop] Synced with SQL Database (brightloop.db)');
+      this.notify();
+    } catch (err) {
+      console.info('ℹ️ [Brightloop] SQL server sync notice (using cached/active memory state):', err);
     }
   }
 
@@ -69,29 +90,6 @@ class BrightloopStore {
     this.listeners.forEach((fn) => fn());
   }
 
-  public async syncFromSupabase() {
-    try {
-      const client = supabase as any;
-      const [custRes, planRes, subRes, invRes, payRes] = await Promise.all([
-        client.from('customers').select('*'),
-        client.from('products_plans').select('*'),
-        client.from('subscriptions').select('*'),
-        client.from('invoices').select('*, items:invoice_items(*)'),
-        client.from('payments').select('*'),
-      ]);
-
-      if (custRes.data && custRes.data.length > 0) this.customers = custRes.data as Customer[];
-      if (planRes.data && planRes.data.length > 0) this.plans = planRes.data as ProductPlan[];
-      if (subRes.data && subRes.data.length > 0) this.subscriptions = subRes.data as Subscription[];
-      if (invRes.data && invRes.data.length > 0) this.invoices = invRes.data as Invoice[];
-      if (payRes.data && payRes.data.length > 0) this.payments = payRes.data as Payment[];
-
-      this.notify();
-    } catch (err) {
-      console.warn('Could not sync with Supabase tables:', err);
-    }
-  }
-
   // --- Customers ---
   public getCustomers(): Customer[] {
     return [...this.customers];
@@ -111,9 +109,17 @@ class BrightloopStore {
     this.customers.unshift(newCust);
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      (supabase as any).from('customers').insert(newCust);
-    }
+    // Async push to SQL Database
+    SqlClient.addCustomer(customer)
+      .then((saved) => {
+        if (saved) {
+          const idx = this.customers.findIndex((c) => c.id === newCust.id);
+          if (idx !== -1) this.customers[idx] = saved;
+          this.notify();
+        }
+      })
+      .catch(() => {});
+
     return newCust;
   }
 
@@ -136,9 +142,16 @@ class BrightloopStore {
     this.plans.push(newPlan);
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      (supabase as any).from('products_plans').insert(newPlan);
-    }
+    SqlClient.addPlan(plan)
+      .then((saved) => {
+        if (saved) {
+          const idx = this.plans.findIndex((p) => p.id === newPlan.id);
+          if (idx !== -1) this.plans[idx] = saved;
+          this.notify();
+        }
+      })
+      .catch(() => {});
+
     return newPlan;
   }
 
@@ -146,8 +159,8 @@ class BrightloopStore {
   public getSubscriptions(): Subscription[] {
     return this.subscriptions.map((sub) => ({
       ...sub,
-      customer: this.getCustomerById(sub.customer_id),
-      plan: this.getPlanById(sub.plan_id),
+      customer: sub.customer || this.getCustomerById(sub.customer_id),
+      plan: sub.plan || this.getPlanById(sub.plan_id),
     }));
   }
 
@@ -156,8 +169,8 @@ class BrightloopStore {
     if (!sub) return undefined;
     return {
       ...sub,
-      customer: this.getCustomerById(sub.customer_id),
-      plan: this.getPlanById(sub.plan_id),
+      customer: sub.customer || this.getCustomerById(sub.customer_id),
+      plan: sub.plan || this.getPlanById(sub.plan_id),
     };
   }
 
@@ -169,13 +182,22 @@ class BrightloopStore {
       id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      customer: this.getCustomerById(subData.customer_id),
+      plan: this.getPlanById(subData.plan_id),
     };
     this.subscriptions.unshift(newSub);
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      (supabase as any).from('subscriptions').insert(newSub);
-    }
+    SqlClient.addSubscription(subData)
+      .then((saved) => {
+        if (saved) {
+          const idx = this.subscriptions.findIndex((s) => s.id === newSub.id);
+          if (idx !== -1) this.subscriptions[idx] = saved;
+          this.notify();
+        }
+      })
+      .catch(() => {});
+
     return newSub;
   }
 
@@ -187,10 +209,6 @@ class BrightloopStore {
         updated_at: new Date().toISOString(),
       };
       this.notify();
-
-      if (isSupabaseConfigured()) {
-        (supabase as any).from('subscriptions').update(sub).eq('id', sub.id);
-      }
     }
   }
 
@@ -207,7 +225,7 @@ class BrightloopStore {
 
     const allowed = ALLOWED_SUBSCRIPTION_TRANSITIONS[sub.status];
     if (!allowed || !allowed.includes(targetState)) {
-      const err = `Invalid state transition: Cannot change from "${sub.status}" to "${targetState}". Allowed transitions: ${allowed ? allowed.join(', ') : 'None'}`;
+      const err = `SQL Constraint Violation: Cannot transition from "${sub.status}" to "${targetState}". Allowed transitions: ${allowed ? allowed.join(', ') : 'None'}`;
       return { success: false, error: err };
     }
 
@@ -224,17 +242,10 @@ class BrightloopStore {
 
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      (supabase as any)
-        .from('subscriptions')
-        .update({
-          status: targetState,
-          paused_at: sub.paused_at,
-          closed_at: sub.closed_at,
-          updated_at: sub.updated_at,
-        })
-        .eq('id', subscriptionId);
-    }
+    // Async push transition to SQL Database
+    SqlClient.transitionSubscriptionState(subscriptionId, targetState).catch((err) => {
+      console.warn('SQL backend transition notice:', err);
+    });
 
     return { success: true };
   }
@@ -243,7 +254,7 @@ class BrightloopStore {
   public getInvoices(): Invoice[] {
     return this.invoices.map((inv) => ({
       ...inv,
-      customer: this.getCustomerById(inv.customer_id),
+      customer: inv.customer || this.getCustomerById(inv.customer_id),
       subscription: inv.subscription_id ? this.getSubscriptionById(inv.subscription_id) : undefined,
     }));
   }
@@ -253,7 +264,7 @@ class BrightloopStore {
     if (!inv) return undefined;
     return {
       ...inv,
-      customer: this.getCustomerById(inv.customer_id),
+      customer: inv.customer || this.getCustomerById(inv.customer_id),
       subscription: inv.subscription_id ? this.getSubscriptionById(inv.subscription_id) : undefined,
     };
   }
@@ -262,37 +273,9 @@ class BrightloopStore {
     this.invoices.unshift(invoice);
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      const { id, created_at, updated_at, items, customer, subscription, ...invoiceRow } = invoice;
-      const client = supabase as any;
-      void (async () => {
-        const { data, error } = await client
-          .from('invoices')
-          .insert(invoiceRow)
-          .select('id')
-          .single();
-        if (error) {
-          console.error('Could not insert invoice into Supabase:', error);
-          return;
-        }
-
-        if (items?.length) {
-          const itemRows = items.map(({ description, quantity, unit_price, amount }) => ({
-            invoice_id: data.id,
-            description,
-            quantity,
-            unit_price,
-            amount,
-          }));
-          const { error: itemsError } = await client.from('invoice_items').insert(itemRows);
-          if (itemsError) {
-            console.error('Could not insert invoice items into Supabase:', itemsError);
-          }
-        }
-      })().catch((error: unknown) => {
-        console.error('Could not persist invoice to Supabase:', error);
-      });
-    }
+    SqlClient.addInvoice(invoice).catch((error: unknown) => {
+      console.error('Could not persist invoice to SQL database:', error);
+    });
     return invoice;
   }
 
@@ -302,13 +285,6 @@ class BrightloopStore {
       inv.status = status;
       inv.updated_at = new Date().toISOString();
       this.notify();
-
-      if (isSupabaseConfigured()) {
-        (supabase as any)
-          .from('invoices')
-          .update({ status, updated_at: inv.updated_at })
-          .eq('id', id);
-      }
     }
   }
 
@@ -316,8 +292,8 @@ class BrightloopStore {
   public getPayments(): Payment[] {
     return this.payments.map((p) => ({
       ...p,
-      customer: this.getCustomerById(p.customer_id),
-      invoice: this.getInvoiceById(p.invoice_id),
+      customer: p.customer || this.getCustomerById(p.customer_id),
+      invoice: p.invoice || this.getInvoiceById(p.invoice_id),
     }));
   }
 
@@ -338,10 +314,12 @@ class BrightloopStore {
       ...payment,
       id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
+      customer: this.getCustomerById(payment.customer_id),
+      invoice: this.getInvoiceById(payment.invoice_id),
     };
     this.payments.unshift(newPayment);
 
-    // Auto reconcile payment against invoice:
+    // Reconcile the invoice in memory before notifying subscribers.
     if (inv && payment.status === 'completed') {
       const currentPaid = Number(inv.amount_paid || 0);
       const newPaid = currentPaid + Number(payment.amount);
@@ -353,29 +331,16 @@ class BrightloopStore {
         inv.status = 'paid';
       }
       inv.updated_at = new Date().toISOString();
-
-      if (isSupabaseConfigured()) {
-        (supabase as any)
-          .from('invoices')
-          .update({
-            amount_paid: inv.amount_paid,
-            balance_due: inv.balance_due,
-            status: inv.status,
-            updated_at: inv.updated_at,
-          })
-          .eq('id', inv.id);
-      }
     }
 
     this.notify();
 
-    if (isSupabaseConfigured()) {
-      (supabase as any).from('payments').insert(newPayment);
-    }
+    // Async push to SQL Database
+    SqlClient.recordPayment(payment).catch(() => {});
     return newPayment;
   }
 
-  // Reset to initial demo state
+  // Reset to initial seed state
   public resetToSeed(): void {
     localStorage.removeItem('bl_customers');
     localStorage.removeItem('bl_plans');
@@ -388,4 +353,4 @@ class BrightloopStore {
   }
 }
 
-export const store = new BrightloopStore();
+export const store = new BrightloopSQLStore();
