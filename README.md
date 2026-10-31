@@ -127,6 +127,8 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## ⚡ Connecting to Live Supabase Backend
 
+> **Authentication required before live use:** The schema enables RLS but intentionally creates no table access policies. This denies browser access until Supabase Auth and per-customer ownership policies are implemented. The app can still run in local demo mode; do not restore unrestricted `USING (true)` policies for production data.
+
 To connect directly to your live Supabase project:
 
 1. **Create a Supabase Project**:

@@ -58,22 +58,27 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     setIsProcessingPayment(true);
 
     setTimeout(() => {
-      store.recordPayment({
-        payment_number: `PAY-PORTAL-${Math.floor(1000 + Math.random() * 9000)}`,
-        invoice_id: payingInvoice.id,
-        customer_id: payingInvoice.customer_id,
-        amount: payingInvoice.balance_due,
-        currency: payingInvoice.currency || 'INR',
-        payment_date: new Date().toISOString().split('T')[0],
-        payment_method: method as any,
-        status: 'completed',
-        transaction_reference: `PORTAL-UPI-${Math.floor(10000000 + Math.random() * 90000000)}`,
-        notes: 'Settled via Customer Self-Service Portal checkout',
-      });
+      try {
+        store.recordPayment({
+          payment_number: `PAY-PORTAL-${Math.floor(1000 + Math.random() * 9000)}`,
+          invoice_id: payingInvoice.id,
+          customer_id: payingInvoice.customer_id,
+          amount: payingInvoice.balance_due,
+          currency: payingInvoice.currency || 'INR',
+          payment_date: new Date().toISOString().split('T')[0],
+          payment_method: method as any,
+          status: 'completed',
+          transaction_reference: `PORTAL-UPI-${Math.floor(10000000 + Math.random() * 90000000)}`,
+          notes: 'Settled via Customer Self-Service Portal checkout',
+        });
 
-      setIsProcessingPayment(false);
-      setPayingInvoice(null);
-      onToast(`Payment of ₹${Number(payingInvoice.balance_due).toLocaleString('en-IN')} confirmed! Invoice marked as PAID.`);
+        setPayingInvoice(null);
+        onToast(`Payment of ₹${Number(payingInvoice.balance_due).toLocaleString('en-IN')} confirmed! Invoice marked as PAID.`);
+      } catch (error) {
+        onToast(error instanceof Error ? error.message : 'Could not process payment.');
+      } finally {
+        setIsProcessingPayment(false);
+      }
     }, 800);
   };
 

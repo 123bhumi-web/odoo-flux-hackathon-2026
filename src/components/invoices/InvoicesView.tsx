@@ -83,18 +83,23 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     e.preventDefault();
     if (!selectedInvoice) return;
 
-    store.recordPayment({
-      payment_number: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      invoice_id: selectedInvoice.id,
-      customer_id: selectedInvoice.customer_id,
-      amount: paymentAmount,
-      currency: selectedInvoice.currency || 'INR',
-      payment_date: new Date().toISOString().split('T')[0],
-      payment_method: paymentMethod,
-      status: 'completed',
-      transaction_reference: txRef,
-      notes: 'Recorded via operator billing desk',
-    });
+    try {
+      store.recordPayment({
+        payment_number: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        invoice_id: selectedInvoice.id,
+        customer_id: selectedInvoice.customer_id,
+        amount: paymentAmount,
+        currency: selectedInvoice.currency || 'INR',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: paymentMethod,
+        status: 'completed',
+        transaction_reference: txRef,
+        notes: 'Recorded via operator billing desk',
+      });
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'Could not record payment.');
+      return;
+    }
 
     onToast(`Payment of ₹${paymentAmount.toLocaleString('en-IN')} recorded successfully`);
     setIsPaymentOpen(false);
