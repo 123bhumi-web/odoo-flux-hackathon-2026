@@ -67,8 +67,8 @@ export const App: React.FC = () => {
     switch (activeTab) {
       case 'dashboard':
         return {
-          title: 'Subscription Operations Dashboard',
-          subtitle: 'Live recurring revenue analytics, delinquency tracking, and automated workflows',
+          title: 'Overview',
+          subtitle: 'A clear view of your subscription business',
         };
       case 'subscriptions':
         return {
@@ -131,16 +131,15 @@ export const App: React.FC = () => {
 
       {/* Main Panel */}
       <main className="bl-main">
-        {/* Header Bar */}
         <Header
           title={title}
           subtitle={subtitle}
           onBillingRunComplete={handleBillingRunComplete}
           onSearch={setSearchTerm}
+          onError={showToast}
         />
 
-        {/* Content Container */}
-        <div className="bl-content">
+        <div className="bl-content" key={activeTab}>
           {activeTab === 'dashboard' && (
             <DashboardView
               subscriptions={subscriptions}
@@ -225,6 +224,11 @@ export const App: React.FC = () => {
 
           {activeTab === 'sql' && <SqlConsoleView />}
         </div>
+
+        <footer className="bl-footer">
+          <span>© {new Date().getFullYear()} Brightloop</span>
+          <span>Subscription operations, made clear.</span>
+        </footer>
       </main>
 
       {/* Real-Time Toast Alert */}

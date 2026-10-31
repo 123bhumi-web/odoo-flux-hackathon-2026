@@ -62,18 +62,23 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
       return;
     }
 
-    store.recordPayment({
-      payment_number: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      invoice_id: inv.id,
-      customer_id: inv.customer_id,
-      amount,
-      currency: inv.currency || 'INR',
-      payment_date: new Date().toISOString().split('T')[0],
-      payment_method: method,
-      status: 'completed',
-      transaction_reference: reference,
-      notes: 'Recorded manually in operator console',
-    });
+    try {
+      store.recordPayment({
+        payment_number: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        invoice_id: inv.id,
+        customer_id: inv.customer_id,
+        amount,
+        currency: inv.currency || 'INR',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: method,
+        status: 'completed',
+        transaction_reference: reference,
+        notes: 'Recorded manually in operator console',
+      });
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : 'Could not record payment.');
+      return;
+    }
 
     onToast(`Payment of ₹${amount.toLocaleString('en-IN')} reconciled against ${inv.invoice_number}`);
     setIsModalOpen(false);
@@ -197,6 +202,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               type="number"
               step="0.01"
               min={1}
+              max={invoices.find((invoice) => invoice.id === selectedInvoiceId)?.balance_due}
               className="bl-input"
               value={amount}
               onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}

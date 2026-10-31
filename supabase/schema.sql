@@ -299,12 +299,13 @@ ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE gravity_risk_logs ENABLE ROW LEVEL SECURITY;
 
--- Allow public read/write for authenticated users / anon access for demo
-CREATE POLICY "Public full access customers" ON customers FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access products" ON products_plans FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access subscriptions" ON subscriptions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access subscription_items" ON subscription_items FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access invoices" ON invoices FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access invoice_items" ON invoice_items FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access payments" ON payments FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access gravity_risk_logs" ON gravity_risk_logs FOR ALL USING (true) WITH CHECK (true);
+-- Fail closed until Supabase Auth and per-customer ownership policies are configured.
+-- With RLS enabled and no policies, browser roles cannot access these tables.
+DROP POLICY IF EXISTS "Public full access customers" ON customers;
+DROP POLICY IF EXISTS "Public full access products" ON products_plans;
+DROP POLICY IF EXISTS "Public full access subscriptions" ON subscriptions;
+DROP POLICY IF EXISTS "Public full access subscription_items" ON subscription_items;
+DROP POLICY IF EXISTS "Public full access invoices" ON invoices;
+DROP POLICY IF EXISTS "Public full access invoice_items" ON invoice_items;
+DROP POLICY IF EXISTS "Public full access payments" ON payments;
+DROP POLICY IF EXISTS "Public full access gravity_risk_logs" ON gravity_risk_logs;

@@ -125,8 +125,72 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
+<<<<<<< HEAD
 ## 🎬 Animated Demo GIF Walkthrough
 The animated walkthrough file is ready to share with your friend:
 - **Location**: `brightloop-subscription-demo.gif` (in project root)
 - **Size**: **1.53 MB**
 - Covers all 11 core scenes: Dashboard, Gravity AI Overdue Risk Analysis, WhatsApp Recovery Notice, SQL Billing Procedure Execution, Subscriptions State Machine, Quotations Conversion, 18% GST Invoices, **SQL Workbench with live query results**, Customer Portal, and Instant UPI Settlement.
+=======
+## ⚡ Connecting to Live Supabase Backend
+
+> **Authentication required before live use:** The schema enables RLS but intentionally creates no table access policies. This denies browser access until Supabase Auth and per-customer ownership policies are implemented. The app can still run in local demo mode; do not restore unrestricted `USING (true)` policies for production data.
+
+To connect directly to your live Supabase project:
+
+1. **Create a Supabase Project**:
+   Go to [supabase.com](https://supabase.com) and create a new project.
+
+2. **Execute Schema & Stored Procedure**:
+   - In your Supabase Dashboard, navigate to the **SQL Editor**.
+   - Copy and execute the contents of `supabase/schema.sql`.
+   - Copy and execute the contents of `supabase/functions/run_scheduled_billing.sql`.
+   - (Optional) Copy and execute `supabase/seed.sql` to populate sample data.
+
+3. **Configure Environment Variables**:
+   In your `.env` file, enter your project URL and public Anon Key:
+   ```env
+   VITE_SUPABASE_URL=https://your-project-id.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   VITE_GRAVITY_AI_API_KEY=grav_live_demo_key_9831a8
+   VITE_GRAVITY_AI_API_ENDPOINT=https://api.gravityai.internal/v1/risk-recovery
+   ```
+
+4. **Deploy Edge Function (Optional for automated Cron / Webhook billing)**:
+   ```bash
+   supabase functions deploy run-scheduled-billing
+   ```
+
+---
+
+## 🧪 Hackathon Demo Walkthrough
+
+1. **Dashboard Overview**:
+   - Check the **MRR** (Monthly Recurring Revenue) and **ARR** tiles.
+   - Note the **Gravity AI Risk Radar** highlighting delinquent accounts like *Hyperion Retail Logistics*.
+
+2. **Gravity AI Risk Evaluation**:
+   - Click **"Evaluate Risk"** on the overdue invoice `INV-202609-1002`.
+   - Inspect the **Default Risk Score** (82/100, High/Severe).
+   - Review the identified risk drivers (days past due, credit exposure ratio).
+   - Toggle between **Email**, **WhatsApp**, and **SMS** tabs to review personalized AI-drafted payment recovery communications.
+   - Click **"Send Recovery Reminder"** to simulate dispatch and audit logging.
+
+3. **Automated Scheduled Billing (`run_scheduled_billing`)**:
+   - Click the top **"Run Automated Billing"** button in the header.
+   - Watch the engine scan active subscriptions, compute subtotal and **18% GST**, generate `INV-YYYYMM-XXXX` invoices without duplicate collisions, and advance `next_billing_date` by the billing interval.
+
+4. **Subscription Lifecycle State Transitions**:
+   - Navigate to **Subscriptions**.
+   - Click on a **Draft** subscription -> Click **"Send Quotation"**.
+   - Move to **Quotations** -> Review terms -> Click **"Convert to Sub"** (advances to **Confirmed**).
+   - Click **"Activate Subscription"** to make it billable.
+   - Test pausing and resuming subscriptions with the visual state stepper.
+
+5. **Customer Self-Service Portal**:
+   - Click **Customer Portal** in the sidebar.
+   - Switch persona to *Vikramaditya Roy (Hyperion Retail Logistics)*.
+   - Notice the red delinquent alert banner.
+   - Click **"Pay Balance Now"** -> Select **UPI** or **Corporate Card** -> Confirm instant settlement.
+   - Observe the invoice status instantly update to **PAID** and the balance due clear to ₹0!
+>>>>>>> origin/vivek-feature

@@ -44,6 +44,26 @@ BEGIN
         AND period_start = v_sub.current_period_start 
         AND period_end = v_sub.current_period_end
     ) THEN
+      IF v_sub.billing_interval = 'quarterly' THEN
+        v_interval_step := INTERVAL '3 months';
+      ELSIF v_sub.billing_interval = 'annually' THEN
+        v_interval_step := INTERVAL '1 year';
+      ELSE
+        v_interval_step := INTERVAL '1 month';
+      END IF;
+
+      v_next_period_start := v_sub.current_period_end;
+      v_next_period_end := (v_next_period_start + v_interval_step)::date;
+
+      UPDATE subscriptions
+      SET
+        current_period_start = v_next_period_start,
+        current_period_end = v_next_period_end,
+        next_billing_date = v_next_period_end,
+        last_billed_date = p_run_date,
+        updated_at = NOW()
+      WHERE id = v_sub.id;
+
       v_skipped_duplicates := v_skipped_duplicates + 1;
       CONTINUE;
     END IF;

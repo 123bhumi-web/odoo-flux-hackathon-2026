@@ -4,15 +4,15 @@ import { SqlClient } from '../lib/sqlClient';
 import { store } from '../lib/storage';
 
 export function addIntervalToDate(dateStr: string, interval: 'monthly' | 'quarterly' | 'annually'): string {
-  const d = new Date(dateStr);
-  if (interval === 'quarterly') {
-    d.setMonth(d.getMonth() + 3);
-  } else if (interval === 'annually') {
-    d.setFullYear(d.getFullYear() + 1);
-  } else {
-    d.setMonth(d.getMonth() + 1);
-  }
-  return d.toISOString().split('T')[0];
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const monthOffset = interval === 'quarterly' ? 3 : interval === 'annually' ? 12 : 1;
+  const targetMonth = new Date(Date.UTC(year, month - 1 + monthOffset, 1));
+  const lastDay = new Date(
+    Date.UTC(targetMonth.getUTCFullYear(), targetMonth.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  const targetDay = Math.min(day, lastDay);
+
+  return `${targetMonth.getUTCFullYear()}-${String(targetMonth.getUTCMonth() + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
 }
 
 /**
@@ -29,6 +29,7 @@ export class BillingEngine {
   ): Promise<ScheduledBillingRunResult> {
     console.info(`⏳ [BillingEngine] Running SQL scheduled billing procedure for date: ${targetDateStr}`);
 
+<<<<<<< HEAD
     try {
       // 1. Call SQL Backend procedure
       const sqlResult = await SqlClient.runScheduledBilling(targetDateStr);
@@ -36,6 +37,33 @@ export class BillingEngine {
         // Sync local reactive store
         await store.syncFromSqlDatabase();
         return sqlResult;
+=======
+    // If Supabase backend is configured and live, call the stored SQL procedure!
+    if (isSupabaseConfigured()) {
+      try {
+        const { data, error } = await (supabase as any).rpc('run_scheduled_billing', {
+          p_run_date: targetDateStr,
+        });
+
+        if (error) {
+          console.error('Supabase run_scheduled_billing error:', error);
+          throw error;
+        }
+
+        const res = data as any;
+        await store.syncFromSupabase();
+        return {
+          runDate: res.run_date || targetDateStr,
+          subscriptionsScanned: res.subscriptions_scanned || 0,
+          invoicesGenerated: res.invoices_generated || 0,
+          skippedDuplicates: res.skipped_duplicates || 0,
+          invoices: res.invoices || [],
+          status: 'success',
+          message: `Generated ${res.invoices_generated || 0} invoices via Supabase stored procedure.`,
+        };
+      } catch (err: any) {
+        console.warn('Fallback to local BillingEngine execution due to RPC error:', err.message);
+>>>>>>> origin/vivek-feature
       }
     } catch (err: any) {
       console.warn('Falling back to direct store execution:', err.message);
@@ -68,6 +96,15 @@ export class BillingEngine {
       );
 
       if (alreadyBilled) {
+        const nextStart = sub.current_period_end;
+        const nextEnd = addIntervalToDate(nextStart, sub.billing_interval);
+        store.updateSubscription({
+          ...sub,
+          current_period_start: nextStart,
+          current_period_end: nextEnd,
+          next_billing_date: nextEnd,
+          last_billed_date: targetDateStr,
+        });
         skippedDuplicates++;
         continue;
       }

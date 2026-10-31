@@ -273,7 +273,41 @@ class BrightloopSQLStore {
     this.invoices.unshift(invoice);
     this.notify();
 
+<<<<<<< HEAD
     SqlClient.addInvoice(invoice).catch(() => {});
+=======
+    if (isSupabaseConfigured()) {
+      const { id, created_at, updated_at, items, customer, subscription, ...invoiceRow } = invoice;
+      const client = supabase as any;
+      void (async () => {
+        const { data, error } = await client
+          .from('invoices')
+          .insert(invoiceRow)
+          .select('id')
+          .single();
+        if (error) {
+          console.error('Could not insert invoice into Supabase:', error);
+          return;
+        }
+
+        if (items?.length) {
+          const itemRows = items.map(({ description, quantity, unit_price, amount }) => ({
+            invoice_id: data.id,
+            description,
+            quantity,
+            unit_price,
+            amount,
+          }));
+          const { error: itemsError } = await client.from('invoice_items').insert(itemRows);
+          if (itemsError) {
+            console.error('Could not insert invoice items into Supabase:', itemsError);
+          }
+        }
+      })().catch((error: unknown) => {
+        console.error('Could not persist invoice to Supabase:', error);
+      });
+    }
+>>>>>>> origin/vivek-feature
     return invoice;
   }
 
@@ -296,6 +330,18 @@ class BrightloopSQLStore {
   }
 
   public recordPayment(payment: Omit<Payment, 'id' | 'created_at'>): Payment {
+    if (!Number.isFinite(payment.amount) || payment.amount <= 0) {
+      throw new Error('Payment amount must be greater than zero.');
+    }
+
+    const inv = this.invoices.find((i) => i.id === payment.invoice_id);
+    if (!inv || inv.customer_id !== payment.customer_id) {
+      throw new Error('Payment must reference a valid invoice for this customer.');
+    }
+    if (payment.amount > Number(inv.balance_due)) {
+      throw new Error('Payment amount cannot exceed the invoice balance due.');
+    }
+
     const newPayment: Payment = {
       ...payment,
       id: crypto.randomUUID(),
@@ -305,8 +351,12 @@ class BrightloopSQLStore {
     };
     this.payments.unshift(newPayment);
 
+<<<<<<< HEAD
     // Reconcile Invoice in memory
     const inv = this.invoices.find((i) => i.id === payment.invoice_id);
+=======
+    // Auto reconcile payment against invoice:
+>>>>>>> origin/vivek-feature
     if (inv && payment.status === 'completed') {
       const currentPaid = Number(inv.amount_paid || 0);
       const newPaid = currentPaid + Number(payment.amount);

@@ -143,21 +143,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer & Self-Service Portal Launcher */}
       <div className="bl-sidebar-footer">
-        <div
+        <button
+          type="button"
           className="bl-portal-switch-card"
           onClick={() => setActiveTab(activeTab === 'portal' ? 'dashboard' : 'portal')}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <div className="bl-portal-switch-heading">
             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Globe size={14} color="#818cf8" />
               {activeTab === 'portal' ? 'Back to Admin' : 'Customer Portal'}
             </span>
             <ExternalLink size={12} color="#a5b4fc" />
           </div>
-          <p style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.3 }}>
+          <span className="bl-portal-description">
             {activeTab === 'portal' ? 'Return to billing operator workspace' : 'Preview self-service client interface'}
-          </p>
-        </div>
+          </span>
+        </button>
 
         {/* Database Connectivity Status */}
         <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

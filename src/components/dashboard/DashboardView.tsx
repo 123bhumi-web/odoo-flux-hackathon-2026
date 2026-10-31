@@ -3,12 +3,11 @@ import { Customer, Invoice, Subscription, Payment } from '../../types/database';
 import { StatCard } from '../common/StatCard';
 import { Badge } from '../common/Badge';
 import { RiskModal } from '../common/RiskModal';
-import { GravityRiskAssessment, ScheduledBillingRunResult } from '../../types/models';
+import { GravityRiskAssessment } from '../../types/models';
 import { GravityService, getDaysOverdue } from '../../services/gravityService';
-import { BillingEngine } from '../../services/billingEngine';
+import type { ActiveTab } from '../layout/Sidebar';
 import {
   TrendingUp,
-  CreditCard,
   Repeat,
   AlertTriangle,
   ShieldAlert,
@@ -18,6 +17,7 @@ import {
   Sparkles,
   CheckCircle2,
   Calendar,
+  Users,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -25,7 +25,7 @@ interface DashboardViewProps {
   invoices: Invoice[];
   customers: Customer[];
   payments: Payment[];
-  onNavigateTab: (tab: any) => void;
+  onNavigateTab: (tab: ActiveTab) => void;
   onToast: (msg: string) => void;
 }
 
@@ -39,7 +39,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [selectedAssessment, setSelectedAssessment] = useState<GravityRiskAssessment | null>(null);
   const [isEvaluating, setIsEvaluating] = useState<string | null>(null);
-  const [isBilling, setIsBilling] = useState(false);
 
   // Financial Metrics:
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
@@ -55,11 +54,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const arr = mrr * 12;
 
-  const overdueInvoices = invoices.filter((i) => i.status === 'overdue');
+  const openInvoices = invoices.filter((i) => Number(i.balance_due) > 0);
+  const overdueInvoices = openInvoices.filter(
+    (invoice) => invoice.status === 'overdue' || getDaysOverdue(invoice.due_date) > 0
+  );
   const totalOverdueAmount = overdueInvoices.reduce((acc, i) => acc + Number(i.balance_due), 0);
-
-  const pendingPayments = invoices.filter((i) => i.status === 'posted');
-  const totalPendingAmount = pendingPayments.reduce((acc, i) => acc + Number(i.balance_due), 0);
 
   const avgRisk = customers.length
     ? Math.round(customers.reduce((acc, c) => acc + Number(c.risk_score), 0) / customers.length)
@@ -84,20 +83,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  const handleRunBillingNow = async () => {
-    setIsBilling(true);
-    try {
-      const res = await BillingEngine.runScheduledBilling();
-      onToast(res.message || 'Billing cycle executed');
-    } catch (err) {
-      onToast('Error executing billing cycle');
-    } finally {
-      setIsBilling(false);
-    }
-  };
-
   return (
-    <div>
+    <div className="bl-dashboard">
+      <section className="bl-dashboard-heading">
+        <div>
+          <span className="bl-eyebrow">OVERVIEW</span>
+          <h1>Your business at a glance</h1>
+          <p>Track recurring revenue, customer health, and billing activity in one place.</p>
+        </div>
+        <div className="bl-dashboard-actions">
+          <button className="bl-btn bl-btn-secondary" onClick={() => onNavigateTab('customers')}>
+            View customers <ArrowRight size={15} />
+          </button>
+          <button className="bl-btn bl-btn-primary" onClick={() => onNavigateTab('subscriptions')}>
+            Manage subscriptions
+          </button>
+        </div>
+      </section>
+
       {/* Metrics Row */}
       <div className="bl-stats-grid">
         <StatCard
@@ -105,7 +108,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           value={`₹${Math.round(mrr).toLocaleString('en-IN')}`}
           subtitle={`Annualized Run Rate: ₹${Math.round(arr).toLocaleString('en-IN')}`}
           icon={<TrendingUp size={20} />}
-          trend={{ value: '+14.2%', isPositive: true }}
           onClick={() => onNavigateTab('subscriptions')}
         />
         <StatCard
@@ -113,28 +115,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           value={activeSubs.length}
           subtitle={`${subscriptions.length} total across all tiers`}
           icon={<Repeat size={20} />}
-          trend={{ value: '+3 this month', isPositive: true }}
           onClick={() => onNavigateTab('subscriptions')}
         />
         <StatCard
-          title="Delinquent / Overdue"
+          title="Customers"
+          value={customers.length}
+          subtitle="Across all accounts"
+          icon={<Users size={20} />}
+          onClick={() => onNavigateTab('customers')}
+        />
+        <StatCard
+          title="Overdue balance"
           value={`₹${Math.round(totalOverdueAmount).toLocaleString('en-IN')}`}
-          subtitle={`${overdueInvoices.length} invoices requiring dunning`}
+          subtitle={`${overdueInvoices.length} invoices need attention`}
           icon={<AlertTriangle size={20} />}
-          trend={{ value: `${overdueInvoices.length} overdue`, isPositive: false }}
           onClick={() => onNavigateTab('invoices')}
         />
         <StatCard
-          title="Average Default Risk"
+          title="Average customer risk"
           value={`${avgRisk}/100`}
-          subtitle="Monitored by Gravity AI"
+          subtitle="Based on account history"
           icon={<ShieldAlert size={20} />}
           onClick={() => onNavigateTab('customers')}
         />
       </div>
 
       {/* Main Grid: Overdue Risk Actions & Scheduled Automation */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '24px', marginBottom: '28px' }}>
+      <div className="bl-dashboard-primary-grid">
         {/* Left Column: Overdue Risk Matrix */}
         <div className="bl-card">
           <div className="bl-card-header">
@@ -177,6 +184,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {overdueInvoices.map((inv) => {
                     const days = getDaysOverdue(inv.due_date);
                     const cust = customers.find((c) => c.id === inv.customer_id);
+                    const riskScore = Number(cust?.risk_score ?? 0);
+                    const riskLevel = riskScore >= 75
+                      ? 'severe'
+                      : riskScore >= 50
+                      ? 'high'
+                      : riskScore >= 25
+                      ? 'medium'
+                      : 'low';
                     return (
                       <tr key={inv.id}>
                         <td>
@@ -201,18 +216,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           ₹{Number(inv.balance_due).toLocaleString('en-IN')}
                         </td>
                         <td>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              background: '#fef2f2',
-                              color: '#dc2626',
-                              fontWeight: 700,
-                              fontSize: '0.78rem',
-                              border: '1px solid #fecaca',
-                            }}
-                          >
-                            High ({cust?.risk_score || 75}/100)
+                          <span className="bl-risk-score">
+                            <Badge status={riskLevel} />
+                            <span>{riskScore}/100</span>
                           </span>
                         </td>
                         <td>
@@ -249,54 +255,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div
-            style={{
-              padding: '16px',
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              borderRadius: '10px',
-              marginBottom: '16px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Calendar size={16} color="#6366f1" />
-              <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>Stored SQL Procedure:</span>
+          <div className="bl-billing-summary">
+            <div className="bl-billing-summary-icon"><Calendar size={18} /></div>
+            <div>
+              <strong>Billing overview</strong>
+              <p>{activeSubs.length} active subscriptions · {openInvoices.length} open invoices</p>
             </div>
-            <code
-              style={{
-                display: 'block',
-                background: '#0f172a',
-                color: '#38bdf8',
-                padding: '10px',
-                borderRadius: '6px',
-                fontSize: '0.78rem',
-                fontFamily: 'monospace',
-                marginBottom: '10px',
-              }}
-            >
-              run_scheduled_billing(CURRENT_DATE)
-            </code>
-            <ul style={{ fontSize: '0.78rem', color: '#475569', paddingLeft: '18px', lineHeight: 1.6 }}>
-              <li>Scans active subscriptions due on or before today</li>
-              <li>Calculates line items & 18% GST (CGST/SGST)</li>
-              <li>Prevents duplicate billing period collisions</li>
-              <li>Advances next_billing_date automatically</li>
-            </ul>
           </div>
-
           <button
-            className="bl-btn bl-btn-primary"
-            style={{ width: '100%', padding: '12px' }}
-            disabled={isBilling}
-            onClick={handleRunBillingNow}
+            className="bl-btn bl-btn-secondary bl-billing-link"
+            onClick={() => onNavigateTab('invoices')}
           >
-            {isBilling ? 'Processing Invoices...' : 'Run Scheduled Billing Now'}
+            Review invoices <ArrowRight size={14} />
           </button>
         </div>
       </div>
 
       {/* Recent Subscriptions & Recent Payments */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div className="bl-dashboard-secondary-grid">
         {/* Subscriptions */}
         <div className="bl-card">
           <div className="bl-card-header">
@@ -319,7 +295,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {subscriptions.slice(0, 5).map((sub) => (
+                {subscriptions.length === 0 ? (
+                  <tr><td colSpan={4} className="bl-table-empty">No subscriptions yet.</td></tr>
+                ) : subscriptions.slice(0, 5).map((sub) => (
                   <tr key={sub.id}>
                     <td className="bl-cell-primary">{sub.subscription_number}</td>
                     <td>{sub.customer?.name}</td>
@@ -358,7 +336,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {payments.slice(0, 5).map((p) => (
+                {payments.length === 0 ? (
+                  <tr><td colSpan={4} className="bl-table-empty">No payments recorded yet.</td></tr>
+                ) : payments.slice(0, 5).map((p) => (
                   <tr key={p.id}>
                     <td>
                       <div className="bl-cell-primary">{p.payment_number}</div>
