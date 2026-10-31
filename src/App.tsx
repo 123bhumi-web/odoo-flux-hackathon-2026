@@ -11,11 +11,14 @@ import { PaymentsView } from './components/payments/PaymentsView';
 import { CustomersView } from './components/customers/CustomersView';
 import { ProductsView } from './components/products/ProductsView';
 import { CustomerPortalView } from './components/portal/CustomerPortalView';
-<<<<<<< .merge_file_pTm19e
+
 import { SqlConsoleView } from './components/sql/SqlConsoleView';
-=======
+
 import { LandingPage } from './components/layout/LandingPage';
->>>>>>> .merge_file_sC9aO2
+
+
+
+
 import { ScheduledBillingRunResult } from './types/models';
 import { CheckCircle2 } from 'lucide-react';
 import './styles/brightloop.css';

@@ -29,44 +29,15 @@ export class BillingEngine {
   ): Promise<ScheduledBillingRunResult> {
     console.info(`⏳ [BillingEngine] Running SQL scheduled billing procedure for date: ${targetDateStr}`);
 
-<<<<<<< HEAD
     try {
-      // 1. Call SQL Backend procedure
       const sqlResult = await SqlClient.runScheduledBilling(targetDateStr);
-      if (sqlResult && sqlResult.status === 'success') {
-        // Sync local reactive store
+      if (sqlResult.status === 'success') {
         await store.syncFromSqlDatabase();
         return sqlResult;
-=======
-    // If Supabase backend is configured and live, call the stored SQL procedure!
-    if (isSupabaseConfigured()) {
-      try {
-        const { data, error } = await (supabase as any).rpc('run_scheduled_billing', {
-          p_run_date: targetDateStr,
-        });
-
-        if (error) {
-          console.error('Supabase run_scheduled_billing error:', error);
-          throw error;
-        }
-
-        const res = data as any;
-        await store.syncFromSupabase();
-        return {
-          runDate: res.run_date || targetDateStr,
-          subscriptionsScanned: res.subscriptions_scanned || 0,
-          invoicesGenerated: res.invoices_generated || 0,
-          skippedDuplicates: res.skipped_duplicates || 0,
-          invoices: res.invoices || [],
-          status: 'success',
-          message: `Generated ${res.invoices_generated || 0} invoices via Supabase stored procedure.`,
-        };
-      } catch (err: any) {
-        console.warn('Fallback to local BillingEngine execution due to RPC error:', err.message);
->>>>>>> origin/vivek-feature
       }
-    } catch (err: any) {
-      console.warn('Falling back to direct store execution:', err.message);
+      console.warn('SQL billing endpoint returned a non-success status; using local billing engine.');
+    } catch (error) {
+      console.warn('SQL billing endpoint unavailable; falling back to local billing:', error);
     }
 
     // Direct store execution fallback

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { sqlDb } from './database/db.js';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function parseBody(req) {
   return new Promise((resolve) => {
@@ -30,6 +31,9 @@ function sqlApiPlugin() {
         res.setHeader('Content-Type', 'application/json');
 
         try {
+          const databaseModule = pathToFileURL(path.resolve('database', 'db.js')).href;
+          const { sqlDb } = await import(databaseModule);
+
           // Customers
           if (url === '/api/customers' && req.method === 'GET') {
             return res.end(JSON.stringify(sqlDb.getCustomers()));

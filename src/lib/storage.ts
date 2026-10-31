@@ -273,41 +273,9 @@ class BrightloopSQLStore {
     this.invoices.unshift(invoice);
     this.notify();
 
-<<<<<<< HEAD
-    SqlClient.addInvoice(invoice).catch(() => {});
-=======
-    if (isSupabaseConfigured()) {
-      const { id, created_at, updated_at, items, customer, subscription, ...invoiceRow } = invoice;
-      const client = supabase as any;
-      void (async () => {
-        const { data, error } = await client
-          .from('invoices')
-          .insert(invoiceRow)
-          .select('id')
-          .single();
-        if (error) {
-          console.error('Could not insert invoice into Supabase:', error);
-          return;
-        }
-
-        if (items?.length) {
-          const itemRows = items.map(({ description, quantity, unit_price, amount }) => ({
-            invoice_id: data.id,
-            description,
-            quantity,
-            unit_price,
-            amount,
-          }));
-          const { error: itemsError } = await client.from('invoice_items').insert(itemRows);
-          if (itemsError) {
-            console.error('Could not insert invoice items into Supabase:', itemsError);
-          }
-        }
-      })().catch((error: unknown) => {
-        console.error('Could not persist invoice to Supabase:', error);
-      });
-    }
->>>>>>> origin/vivek-feature
+    SqlClient.addInvoice(invoice).catch((error: unknown) => {
+      console.error('Could not persist invoice to SQL database:', error);
+    });
     return invoice;
   }
 
@@ -351,12 +319,7 @@ class BrightloopSQLStore {
     };
     this.payments.unshift(newPayment);
 
-<<<<<<< HEAD
-    // Reconcile Invoice in memory
-    const inv = this.invoices.find((i) => i.id === payment.invoice_id);
-=======
-    // Auto reconcile payment against invoice:
->>>>>>> origin/vivek-feature
+    // Reconcile the invoice in memory before notifying subscribers.
     if (inv && payment.status === 'completed') {
       const currentPaid = Number(inv.amount_paid || 0);
       const newPaid = currentPaid + Number(payment.amount);
